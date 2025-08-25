@@ -195,6 +195,33 @@ def cache_countermeasure(X_data, noise_std, random_seed=RANDOM_SEED):
     return X_data_noisy
 
 
+def network_countermeasure(X_data, noise_std,inserting_noise_p, random_seed=RANDOM_SEED):
+    """
+    Adds controlled Gaussian noise to the input data as a countermeasure, with noise inserted at random positions.
+    Parameters
+    ----------
+    X_data : np.ndarray
+        Input data array to which noise will be added.
+    noise_std : float
+        Standard deviation of the Gaussian noise to be added.
+    inserting_noise_p : float
+        Probability of inserting noise at each position in the input data.
+    random_seed : int, optional
+        Seed for the random number generator to ensure reproducibility. Defaults to RANDOM_SEED.
+    Returns
+    -------
+    np.ndarray
+        The input data array with noise added at randomly selected positions.
+    """
+    rng = np.random.default_rng(random_seed)
+    # noise can be negative here
+    noise = rng.normal(0, noise_std, X_data.shape)
+    p_of_inserting_noise = rng.binomial(1, inserting_noise_p, size=X_data.shape)
+    noise = noise * p_of_inserting_noise
+    X_data_noisy = X_data + noise
+    return X_data_noisy
+
+
 def predict_on_hdf5(test_path, model,label_encoder,batch_size=32):
     # Open the HDF5 file for reading
     with h5py.File(test_path, 'r') as hdf:
