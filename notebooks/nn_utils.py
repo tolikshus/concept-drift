@@ -7,7 +7,11 @@ class TripletSemiHardLoss(tf.keras.losses.Loss):
     Computes the triplet loss with semi-hard negative mining.
 
     Reference:
-    https://www.tensorflow.org/addons/api_docs/python/tfa/losses/TripletSemiHardLoss
+    https://www.tensorflow.org/addons/api_docs/python/tfa/losses/TripletSemiH
+    
+    
+    
+    ardLoss
     Adapted for TensorFlow 2.x without tf_addons dependency.
     """
 
@@ -103,6 +107,27 @@ class L2NormalizationLayer(Layer):
   def compute_output_shape(self, input_shape):
       return input_shape
 
+def triplet_cnn(input_vector, output_size,kernel_size, filters=32, strides=5, pool_size=4,dropout=0.8,lr=0.001):
+    kernels=[]
+    if type(kernel_size)is list:
+        kernels=kernel_size
+    else:
+        kernels.extend([kernel_size,kernel_size])
+    inp = Input(shape=(input_vector,1))
+    x = Conv1D(filters, kernel_size=kernels[0], strides=strides, activation='relu')(inp)
+    x = MaxPool1D(pool_size=pool_size, padding='same')(x)
+    x=Dropout(dropout)(x)
+    x = Conv1D(filters, kernel_size=kernels[1], strides=strides, activation='relu')(x)
+    x = MaxPool1D(pool_size=pool_size, padding='same')(x)
+    x = Dropout(dropout)(x)
+    x = Flatten()(x)
+    X = Dense(output_size, activation=None)(x)
+    #preds = Lambda(lambda l: tf.math.l2_normalize(l, axis=1))(X)
+    preds = L2NormalizationLayer(axis=1)(X)
+    model = Model(inputs=inp, outputs=preds)
+    opt=tf.keras.optimizers.Adam(lr)
+    model.compile(optimizer=opt,loss=TripletSemiHardLoss())
+    return model
 
 def triplet_cnn_lstm(input_vector, output_size, filters, strides, pool_size, units, dropout,
                       lr=0.001) -> tf.keras.Model:

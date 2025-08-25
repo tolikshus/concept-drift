@@ -5,20 +5,43 @@ import pathlib
 import pickle
 import re
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.model_selection import train_test_split
 from scipy.sparse import csr_matrix
+
+RANDOM_SEED=42
 
 def get_data_paths_ordered(data_path:str)->pathlib.Path:
     pattern = r'^\d{4}_\d{2}_\d{2}$'
     data_dir = pathlib.Path(data_path)
     paths = sorted([p for p in data_dir.iterdir() if p.is_dir() and bool(re.match(pattern, p.stem)) ])
     return paths
+    
+@tf.function(jit_compile=True)
+def smooth(curr_input, max_val):
+    """Smooths the input tensor by dividing by max_val if any element exceeds it."""
+    def body(arr, m):
+        # Divide elements exceeding m by m
+        return tf.where(arr > m, arr / m, arr), m
+
+    max_val_casted = tf.cast(max_val, tf.float64)
+    # Cast the result of reduce_max to float32 before comparison
+    condition = lambda x, m: tf.cast(tf.math.reduce_max(x), tf.float64) > m
+    curr_input_casted=tf.cast(curr_input, tf.float64)
+    arr, _ = tf.while_loop(
+        condition,
+        body,
+        loop_vars=[curr_input_casted, max_val_casted],
+        parallel_iterations=20,
+        maximum_iterations=5
+    )
+
+    return arr
 
 @tf.function(jit_compile=True)
 def standartize(curr_input):
-    curr_input = tf.cast(curr_input, tf.float32)
-    mean, variance = tf.nn.moments(curr_input, axes=None)
-    std = tf.sqrt(variance) + 0.0001 # the original function was without sqrt
-    return (curr_input - mean) / std
+    mean = tf.math.reduce_mean(curr_input)
+    std = tf.math.reduce_std(curr_input)
+    return tf.math.divide_no_nan(curr_input - mean, std)
 
 # Define the CNN-LSTM model creation function
 def cnn_lstm(n_dataset_features, num_of_classes, features_per_layer, strides, pool_size, units, dropout):
@@ -49,52 +72,23 @@ def small_cnn_lstm(n_dataset_features, num_of_classes, features_per_layer, strid
     model.compile(optimizer=opt, loss='categorical_crossentropy', metrics=['accuracy'])  # optimizer, metrics
     return model
 
-def prepare_hdf5_data(path, label_encoder, batch_size=32, n_samples=-1,sample_validation=0.1,verbose=0):
-    # Open the HDF5 file for reading
-    with h5py.File(path, 'r') as hdf:
-        X_data = hdf['vector'][:]
-        y_data = label_encoder.transform(hdf['site_name'][:].reshape(-1, 1)).toarray()
 
-        if n_samples != -1:
-            # Filter data based on n_samples per label
-            X_filtered, y_filtered = [], []
-            unique_labels = np.unique(np.argmax(y_data, axis=1))  # Get unique label indices
-
-            for label in unique_labels:
-                label_indices = np.where(np.argmax(y_data, axis=1) == label)[0]
-                selected_indices = label_indices[:n_samples]  # Select first n_samples for this label
-                X_filtered.extend(X_data[selected_indices])
-                y_filtered.extend(y_data[selected_indices])
-
-            X_data = np.array(X_filtered)
-            y_data = np.array(y_filtered)
-        if sample_validation > 0:
-            train_size = int(len(X_data) * (1 - sample_validation))
-            train_dataset = tf.data.Dataset.from_tensor_slices((X_data[:train_size], y_data[:train_size]))
-
-            val_dataset = tf.data.Dataset.from_tensor_slices((X_data[train_size:], y_data[train_size:]))
-            validation_data = val_dataset
-        else:
-            train_dataset = tf.data.Dataset.from_tensor_slices((X_data, y_data))
-            validation_data = None
-        validation_data = None if isinstance(validation_data,type(None)) else validation_data.map(lambda x, y: (standartize(x), y)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        train_dataset = train_dataset.shuffle(len(y_data)).map(lambda x, y: (standartize(x), y)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    return {'data':train_dataset,'val':validation_data}
-
-
-# Function to train the model on batches from HDF5 file
-def train_on_hdf5(train_path, model, label_encoder, batch_size=32, n_epochs=100, n_samples=-1,sample_validation=0.1,verbose=0):
-    early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss',
-        patience=5,
-        restore_best_weights=True
-    )
+def load_hdf5_data(path, label_encoder, n_samples=-1):
+    """
+    Reads data from an HDF5 file and returns features and labels.
     
-    # Open the HDF5 file for reading
-    with h5py.File(train_path, 'r') as hdf:
-        X_data = hdf['vector'][:]
+    Args:
+        path (str): Path to the HDF5 file.
+        label_encoder: Label encoder object with a transform method.
+        n_samples (int, optional): Number of samples per label to include. Defaults to -1 (all samples).
+        
+    Returns:
+        tuple: (X_data, y_data) containing features and one-hot encoded labels.
+    """
+    with h5py.File(path, 'r') as hdf:
+        X_data = hdf['vector'][:].astype(float)
         y_data = label_encoder.transform(hdf['site_name'][:].reshape(-1, 1)).toarray()
-
+        
         if n_samples != -1:
             # Filter data based on n_samples per label
             X_filtered, y_filtered = [], []
@@ -108,28 +102,97 @@ def train_on_hdf5(train_path, model, label_encoder, batch_size=32, n_epochs=100,
 
             X_data = np.array(X_filtered)
             y_data = np.array(y_filtered)
-        if sample_validation > 0:
-            train_size = int(len(X_data) * (1 - sample_validation))
-            train_dataset = tf.data.Dataset.from_tensor_slices((X_data[:train_size], y_data[:train_size]))
-
-            val_dataset = tf.data.Dataset.from_tensor_slices((X_data[train_size:], y_data[train_size:])) 
-            validation_data = val_dataset
-        else:
-            train_dataset = tf.data.Dataset.from_tensor_slices((X_data, y_data))
-            validation_data = None
-        validation_data = None if isinstance(validation_data,type(None)) else validation_data.map(lambda x, y: (standartize(x), y)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        train_dataset = train_dataset.shuffle(len(y_data)).map(lambda x, y: (standartize(x), y)).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-
-        # Train the model
+            
+    return X_data, y_data
 
 
-        model.fit(
-            train_dataset,
-            validation_data=validation_data ,
-            epochs=n_epochs,
-            callbacks=[early_stopping],
-            verbose=verbose
-        )
+def prepare_hdf5_data(X_data, y_data, noise_function=None, batch_size=32, sample_validation=0.1, max_val=8192, verbose=0,shuffle=True):
+    """
+    Prepares data for training and validation with optional noise.
+
+    Args:
+        X_data (np.ndarray): The feature data.
+        y_data (np.ndarray): The label data (one-hot encoded).
+        noise_function (callable, optional): Function to apply noise to X_data.
+            Defaults to None, in which case no noise is applied.
+            The function should take X_data as input and return the noised X_data.
+        batch_size (int, optional): Batch size for datasets. Defaults to 32.
+        sample_validation (float, optional): Fraction of data to use for validation. Defaults to 0.1.
+        max_val (float, optional): Maximum value for data smoothing. Defaults to 8192.
+        verbose (int, optional): Verbos
+    Returns:
+        dict: A dictionary containing 'data' (training dataset) and 'val' (validation dataset).
+    """
+    # Apply noise if a noise function is provided
+    if noise_function is not None:
+        X_data = noise_function(X_data)
+
+    # Create training and validation datasets
+    if sample_validation > 0:
+        X_trn, X_tst, y_trn, y_tst = train_test_split( X_data, y_data, test_size=sample_validation, random_state=42)
+        train_dataset = tf.data.Dataset.from_tensor_slices((X_trn, y_trn))
+        val_dataset = tf.data.Dataset.from_tensor_slices((X_tst, y_tst))
+        validation_data = val_dataset
+    else:
+        train_dataset = tf.data.Dataset.from_tensor_slices((X_data, y_data))
+        validation_data = None
+
+    # Process validation data
+    validation_data = None if isinstance(validation_data, type(None)) else validation_data.map(
+        lambda x, y: (standartize(tf.cast(x, tf.float32)), y)
+    ).batch(batch_size).prefetch(tf.data.AUTOTUNE) #.map(lambda x,y:(smooth(x,max_val),y))
+
+    # Process training data
+    if shuffle:
+      train_dataset = train_dataset.shuffle(len(y_data))
+    train_dataset = train_dataset.map(lambda x, y: (standartize(tf.cast(x, tf.float32)), y)
+    ).batch(batch_size).prefetch(tf.data.AUTOTUNE) #.map(lambda x,y:(smooth(x,max_val),y))
+
+    return {'data': train_dataset, 'val': validation_data}
+
+
+def create_subset_encoder(original_encoder, n_categories):
+  """
+  Creates a new OneHotEncoder with only the first n categories from the original encoder.
+  
+  Args:
+      original_encoder: A fitted OneHotEncoder.
+      n_categories: The number of categories to keep in the new encoder.
+      
+  Returns:
+      A new OneHotEncoder with only the first n categories.
+  """
+  if not hasattr(original_encoder, 'categories_'):
+      raise ValueError("The original encoder must be fitted before creating a subset.")
+  
+  # Extract the original categories
+  original_categories = original_encoder.categories_
+  
+  # Create a new list with only the first n categories for each feature
+  subset_categories = [categories[:n_categories] for categories in original_categories]
+  
+  # Create a new encoder with the subset of categories
+  subset_encoder = OneHotEncoder(categories=subset_categories, sparse_output=True)
+  
+  return subset_encoder
+
+def cache_countermeasure(X_data, noise_std, random_seed=RANDOM_SEED):
+    """
+    Adds absolute normal noise to the input data.
+
+    Args:
+        X_data (np.ndarray): The input data to add noise to.
+        noise_std (float): The standard deviation of the normal distribution for generating noise.
+        random_seed (int, optional): The random seed for reproducibility. Defaults to RANDOM_SEED.
+
+    Returns:
+        np.ndarray: The data with added noise.
+    """
+    rng = np.random.default_rng(random_seed)
+    # abs on normal distribution, always positive
+    noise = np.abs(rng.normal(0, noise_std, X_data.shape))
+    X_data_noisy = X_data + noise
+    return X_data_noisy
 
 
 def predict_on_hdf5(test_path, model,label_encoder,batch_size=32):
@@ -168,32 +231,4 @@ def test_on_hdf5(test_path, model,label_encoder,batch_size=32):
         print(f"Test Loss: {loss}, Test Accuracy: {accuracy}")
         return accuracy
 
-class OpenWorldLabelEncoder:
-    def __init__(self, label_encoder, max_label):
-        """
-        Initializes the OpenWorldLabelEncoder.
-
-        Args:
-            label_encoder: A fitted label encoder object (e.g., from sklearn.preprocessing).
-            max_label: The maximum label index to keep. Labels greater than this will be mapped to max_label.
-        """
-        self.label_encoder = label_encoder
-        self.max_label = max_label-1
-        self.open_world_label = 'open_world' # Define the string representation for the open_world label
-
-    def transform(self, labels):
-          processed_labels = np.asarray(labels).reshape(-1, 1)
-          clipped_transformed = self.label_encoder.transform(processed_labels)[:, :self.max_label].toarray()
-          no_one_mask = np.all(clipped_transformed == 0, axis=1)
-          last_column = np.zeros((clipped_transformed.shape[0], 1), dtype=clipped_transformed.dtype)
-          last_column[no_one_mask, 0] = 1
-          clipped_transformed =np.concatenate((clipped_transformed, last_column), axis=1)
-          return csr_matrix(clipped_transformed,dtype=np.float64)
-    def inverse_transform(self, numerical_labels):
-        open_world_mask = (numerical_labels == self.max_label)
-        original_labels = self.label_encoder.inverse_transform(numerical_labels[~open_world_mask])
-        transformed_labels = np.empty(numerical_labels.shape, dtype=object)
-        transformed_labels[~open_world_mask] = original_labels
-        transformed_labels[open_world_mask] = self.open_world_label
-        return transformed_labels
 
