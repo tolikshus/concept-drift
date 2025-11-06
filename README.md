@@ -50,11 +50,14 @@ This project implements a series of experiments to study concept drift in websit
 ## Usage
 1. **Data Loading**: Start by running `concept-drift-data-load.ipynb` to download and prepare the dataset from the Mendeley Data repository.
 2. **Model Training**: Execute `concept-drift-training.ipynb` to train the initial CNN-LSTM model (Model 0) on the first time period.
-3. **Run Experiments**: Choose one or more experiment notebooks based on your research goals:
+3. **Configure Experiment Parameters**: Before running any experiment notebook, set the following parameters at the beginning of the notebook:
+   - `attack_vector`: Choose `'cache'` or `'network'` to select the attack type
+   - `machine_setting`: Choose `'static_browser_version'` or `'dynamic_browser_version'` to select the data collection mode
+4. **Run Experiments**: Choose one or more experiment notebooks based on your research goals:
    - For baseline performance: `concept-drift-baseline.ipynb`
    - For adaptation strategies: `concept-drift-incremental.ipynb` or `concept-drift-transfer.ipynb`
    - For noise countermeasures: `concept-drift-baseline-noise.ipynb`, `concept-drift-baseline-cache-noise.ipynb`, or `concept-drift-baseline-packet-noise.ipynb`
-4. Modify hyperparameters and configuration settings as needed within each notebook.
+5. Modify hyperparameters and configuration settings as needed within each notebook.
 
 ## Experiment Details
 
