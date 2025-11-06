@@ -43,8 +43,6 @@ This project implements a series of experiments to study concept drift in websit
   - `concept-drift-incremental.ipynb`: Incremental learning with periodic model updates using new data.
   - `concept-drift-transfer.ipynb`: Transfer learning approach retraining from base model at each time period.
   - `concept-drift-baseline-noise.ipynb`: Baseline evaluation with parametric noise countermeasures.
-  - `concept-drift-baseline-cache-noise.ipynb`: Baseline with cache-specific noise defense mechanisms.
-  - `concept-drift-baseline-packet-noise.ipynb`: Baseline with packet-level noise defense mechanisms.
   - `nn_utils.py`: Neural network utility functions.
   - `utils.py`: General utility functions for data processing and model evaluation.
 - `requirements.txt`: Python dependencies.
