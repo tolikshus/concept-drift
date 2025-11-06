@@ -33,10 +33,8 @@ This project implements a series of experiments to study concept drift in websit
   - `concept-drift-training.ipynb`: Initial model training (Model 0) using CNN-LSTM architecture.
   - `concept-drift-baseline.ipynb`: Baseline evaluation without adaptation (closed-world and open-world settings).
   - `concept-drift-incremental.ipynb`: Incremental learning with periodic model updates using new data.
-  - `concept-drift-transfer.ipynb`: Transfer learning approach retraining model from scratch at each time period.
+  - `concept-drift-transfer.ipynb`: Transfer learning approach retraining from base model at each time period.
   - `concept-drift-baseline-noise.ipynb`: Baseline evaluation with parametric noise countermeasures.
-  - `concept-drift-baseline-cache-noise.ipynb`: Baseline with cache-specific noise defense mechanisms.
-  - `concept-drift-baseline-packet-noise.ipynb`: Baseline with packet-level noise defense mechanisms.
   - `nn_utils.py`: Neural network utility functions.
   - `utils.py`: General utility functions for data processing and model evaluation.
 - `requirements.txt`: Python dependencies.
@@ -122,15 +120,9 @@ Implements periodic retraining strategy where the model is retrained from the ba
 
 #### General Noise (`concept-drift-baseline-noise.ipynb`)
 Evaluates baseline model robustness against generic countermeasures:
-- **Cache noise**: Gaussian noise with varying standard deviations.
-- **Network noise**: Packet insertion with varying noise std and insertion probabilities.
+- **Cache noise**: Focused evaluation of cache-based countermeasures using absolute value Gaussian noise applied to cache access patterns, testing multiple noise standard deviations to assess defense-accuracy tradeoffs.
+- **Network noise**: Focused evaluation of network-based countermeasures using packet insertion and timing perturbations. Tests various combinations of noise intensity and insertion probability to understand the impact on classifier accuracy.
 - Tests model performance degradation under different defense intensity levels
-
-#### Cache-Specific Noise (`concept-drift-baseline-cache-noise.ipynb`)
-Focused evaluation of cache-based countermeasures using absolute value Gaussian noise applied to cache access patterns, testing multiple noise standard deviations to assess defense-accuracy tradeoffs.
-
-#### Packet-Specific Noise (`concept-drift-baseline-packet-noise.ipynb`)
-Focused evaluation of network-based countermeasures using packet insertion and timing perturbations. Tests various combinations of noise intensity and insertion probability to understand the impact on classifier accuracy.
 
 ## Results
 Results and outputs are generated within each notebook as the experiments run:
@@ -145,4 +137,3 @@ All metrics are computed using test data from each time period and stored in res
 ## References
 - **Roie David, Anatoly Shusterman, Yossi Oren**. "Understanding and Addressing Concept Drift in Website Fingerprinting". *Elsevier Computer Networks Journal*, to appear.
 - **Anatoly Shusterman, Roie David, Yossi Oren** (2025). "Concept Drift in Website Fingerprinting". *Mendeley Data*, V2. doi: [10.17632/fd6ggttgj4.2](https://doi.org/10.17632/fd6ggttgj4.2)
-
