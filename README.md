@@ -27,6 +27,14 @@ This project implements a series of experiments to study concept drift in websit
    pip install -r requirements.txt
    ```
 
+3. **Acquire Mendeley Data API Credentials** (required for data loading):
+   - Register your app at the [Mendeley Developer Portal](https://www.mendeley.com/) and obtain Client ID and Client Secret
+   - Store your credentials securely:
+     - For Google Colab: Save as userdata with keys `mendeley-id` and `mendeley-key`
+     - For local environment: Use environment variables or a secure configuration file
+   - The notebook uses client_credentials grant type to obtain access tokens automatically
+   - See the [Mendeley Data API documentation](https://data.mendeley.com/api/docs/) for detailed instructions
+
 ## Directory Structure
 - `notebooks/`
   - `concept-drift-data-load.ipynb`: Data loading and preprocessing from Mendeley dataset repository.
@@ -35,6 +43,8 @@ This project implements a series of experiments to study concept drift in websit
   - `concept-drift-incremental.ipynb`: Incremental learning with periodic model updates using new data.
   - `concept-drift-transfer.ipynb`: Transfer learning approach retraining from base model at each time period.
   - `concept-drift-baseline-noise.ipynb`: Baseline evaluation with parametric noise countermeasures.
+  - `concept-drift-baseline-cache-noise.ipynb`: Baseline with cache-specific noise defense mechanisms.
+  - `concept-drift-baseline-packet-noise.ipynb`: Baseline with packet-level noise defense mechanisms.
   - `nn_utils.py`: Neural network utility functions.
   - `utils.py`: General utility functions for data processing and model evaluation.
 - `requirements.txt`: Python dependencies.
@@ -116,9 +126,7 @@ Implements periodic retraining strategy where the model is retrained from the ba
 - Trains for up to 30 epochs with learning rate 1e-5
 - Tests whether periodic retraining from the stable base model is more effective than incremental updates
 
-### Noise Defense Experiments
-
-#### General Noise (`concept-drift-baseline-noise.ipynb`)
+### Noise Defense Experiments (`concept-drift-baseline-noise.ipynb`)
 Evaluates baseline model robustness against generic countermeasures:
 - **Cache noise**: Focused evaluation of cache-based countermeasures using absolute value Gaussian noise applied to cache access patterns, testing multiple noise standard deviations to assess defense-accuracy tradeoffs.
 - **Network noise**: Focused evaluation of network-based countermeasures using packet insertion and timing perturbations. Tests various combinations of noise intensity and insertion probability to understand the impact on classifier accuracy.
